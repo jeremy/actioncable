@@ -121,7 +121,6 @@ module ActionCable
         @params     = params
 
         delegate_connection_identifiers
-        subscribe_to_channel
       end
 
       # Extract the action name from the passed data and process it via the channel. The process will ensure
@@ -137,9 +136,17 @@ module ActionCable
         end
       end
 
+
+      # Called by the cable connection when the channel is established.
+      # Internal only. Use the #subscribed callback in app code.
+      def subscribe_to_channel #:nodoc:
+        run_subscribe_callbacks
+        self
+      end
+
       # Called by the cable connection when its cut so the channel has a chance to cleanup with callbacks.
       # This method is not intended to be called directly by the user. Instead, overwrite the #unsubscribed callback.
-      def unsubscribe_from_channel
+      def unsubscribe_from_channel #:nodoc:
         run_unsubscribe_callbacks
       end
 
@@ -172,11 +179,6 @@ module ActionCable
               connection.send(identifier)
             end
           end
-        end
-
-
-        def subscribe_to_channel
-          run_subscribe_callbacks
         end
 
 

@@ -13,9 +13,7 @@ class ActionCable::Connection::AuthorizationTest < ActionCable::TestCase
   test "unauthorized connection" do
     run_in_eventmachine do
       server = TestServer.new
-      env = Rack::MockRequest.env_for "/test", 'HTTP_CONNECTION' => 'upgrade', 'HTTP_UPGRADE' => 'websocket'
-
-      connection = Connection.new(server, env)
+      connection = Connection.new(server, server.mock_env)
       connection.websocket.expects(:close)
       connection.process
       connection.send :on_open

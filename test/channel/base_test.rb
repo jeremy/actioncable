@@ -73,12 +73,14 @@ class ActionCable::Channel::BaseTest < ActiveSupport::TestCase
     @channel = ChatChannel.new @connection, "{id: 1}", { id: 1 }
   end
 
-  test "should subscribe to a channel on initialize" do
-    assert_equal 1, @channel.room.id
+  test "should not subscribe to a channel on initialize" do
+    assert_nil @channel.room
   end
 
   test "on subscribe callbacks" do
-    assert @channel.subscribed
+    @channel.subscribe_to_channel
+    assert @channel.subscribed?
+    assert @channel.room
   end
 
   test "channel params" do
@@ -86,13 +88,13 @@ class ActionCable::Channel::BaseTest < ActiveSupport::TestCase
   end
 
   test "unsubscribing from a channel" do
+    @channel.subscribe_to_channel
     assert @channel.room
     assert @channel.subscribed?
 
     @channel.unsubscribe_from_channel
-
-    assert ! @channel.room
-    assert ! @channel.subscribed?
+    assert_nil @channel.room
+    assert_not @channel.subscribed?
   end
 
   test "connection identifiers" do

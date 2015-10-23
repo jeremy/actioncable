@@ -29,7 +29,9 @@ module ActionCable
         subscription_klass = connection.server.channel_classes[id_options[:channel]]
 
         if subscription_klass
-          subscriptions[id_key] ||= subscription_klass.new(connection, id_key, id_options)
+          subscriptions[id_key] ||= subscription_klass.
+            new(connection, id_key, id_options).
+            subscribe_to_channel
         else
           logger.error "Subscription class not found (#{data.inspect})"
         end

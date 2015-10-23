@@ -8,11 +8,6 @@ class ActionCable::Connection::StringIdentifierTest < ActionCable::TestCase
     def connect
       self.current_token = "random-string"
     end
-
-    def send_async(method, *args)
-      # Bypass Celluloid
-      send method, *args
-    end
   end
 
   test "connection identifier" do
@@ -31,8 +26,7 @@ class ActionCable::Connection::StringIdentifierTest < ActionCable::TestCase
     end
 
     def open_connection
-      env = Rack::MockRequest.env_for "/test", 'HTTP_CONNECTION' => 'upgrade', 'HTTP_UPGRADE' => 'websocket'
-      @connection = Connection.new(@server, env)
+      @connection = Connection.new(@server, @server.mock_env)
 
       @connection.process
       @connection.send :on_open

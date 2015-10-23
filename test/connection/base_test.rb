@@ -3,19 +3,20 @@ require 'stubs/test_server'
 
 class ActionCable::Connection::BaseTest < ActionCable::TestCase
   class Connection < ActionCable::Connection::Base
-    attr_reader :websocket, :subscriptions, :message_buffer, :connected
+    attr_reader :websocket, :subscriptions, :message_buffer
+    attr_reader :connected_event, :disconnected_event
+
+    def initialize(*args)
+      @connected_event = Concurrent.event
+      @disconnected_event = Concurrent.event
+    end
 
     def connect
-      @connected = true
+      @connected_event.complete
     end
 
     def disconnect
-      @connected = false
-    end
-
-    def send_async(method, *args)
-      # Bypass Celluloid
-      send method, *args
+      @disconnected_event.complete
     end
   end
 
@@ -62,7 +63,7 @@ class ActionCable::Connection::BaseTest < ActionCable::TestCase
       # Allow EM to run on_open callback
       EM.next_tick do
         assert_equal [ connection ], @server.connections
-        assert connection.connected
+        assert connection.connected_event.completed?
       end
     end
   end
@@ -75,12 +76,12 @@ class ActionCable::Connection::BaseTest < ActionCable::TestCase
       # Setup the connection
       EventMachine.stubs(:add_periodic_timer).returns(true)
       connection.send :on_open
-      assert connection.connected
+      assert connection.connected_event.wait
 
       connection.subscriptions.expects(:unsubscribe_from_all)
       connection.send :on_close
 
-      assert ! connection.connected
+      assert connection.disconnected_event.wait
       assert_equal [], @server.connections
     end
   end
@@ -110,9 +111,6 @@ class ActionCable::Connection::BaseTest < ActionCable::TestCase
 
   private
     def open_connection
-      env = Rack::MockRequest.env_for "/test", 'HTTP_CONNECTION' => 'upgrade', 'HTTP_UPGRADE' => 'websocket',
-        'HTTP_ORIGIN' => 'http://rubyonrails.com'
-
-      Connection.new(@server, env)
+      Connection.new @server, @server.mock_env
     end
 end

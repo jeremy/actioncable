@@ -9,8 +9,8 @@ Bundler.require :default, :test
 
 require 'puma'
 require 'mocha/mini_test'
-
 require 'rack/mock'
+require 'byebug'
 
 require 'action_cable'
 ActiveSupport.test_order = :sorted
@@ -18,10 +18,8 @@ ActiveSupport.test_order = :sorted
 # Require all the stubs and models
 Dir[File.dirname(__FILE__) + '/stubs/*.rb'].each {|file| require file }
 
-require 'celluloid'
-$CELLULOID_DEBUG = false
-$CELLULOID_TEST = false
-Celluloid.logger = Logger.new(StringIO.new)
+require 'concurrent-edge'
+Concurrent.global_logger = Logger.new($stderr)
 
 require 'faye/websocket'
 class << Faye::WebSocket

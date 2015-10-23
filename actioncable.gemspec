@@ -16,17 +16,22 @@ Gem::Specification.new do |s|
 
   s.add_dependency 'activesupport',    '>= 4.2.0'
   s.add_dependency 'actionpack',       '>= 4.2.0'
+  s.add_dependency 'coffee-rails'
+
   s.add_dependency 'faye-websocket',   '~> 0.10.0'
   s.add_dependency 'websocket-driver', '~> 0.6.1'
-  # Use 0.16.0 until https://github.com/celluloid/celluloid/issues/637 is resolved
-  s.add_dependency 'celluloid',        '~> 0.16.0'
+
   s.add_dependency 'em-hiredis',       '~> 0.3.0'
   s.add_dependency 'redis',            '~> 3.0'
-  s.add_dependency 'coffee-rails'
+
+  s.add_dependency 'concurrent-ruby', '~> 1.0.0.pre4'
+  s.add_dependency 'concurrent-ruby-edge', '~> 0.2.0.pre4'
+  s.add_dependency 'concurrent-ruby-ext', '~> 1.0.0.pre4'
 
   s.add_development_dependency 'rake'
   s.add_development_dependency 'puma'
   s.add_development_dependency 'mocha'
+  s.add_development_dependency 'byebug'
 
   s.files = Dir['README.md', 'lib/**/*']
   s.has_rdoc = false

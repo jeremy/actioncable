@@ -3,11 +3,6 @@ require 'test_helper'
 class ActionCable::Connection::SubscriptionsTest < ActionCable::TestCase
   class Connection < ActionCable::Connection::Base
     attr_reader :websocket
-
-    def send_async(method, *args)
-      # Bypass Celluloid
-      send method, *args
-    end
   end
 
   class ChatChannel < ActionCable::Channel::Base
@@ -108,8 +103,7 @@ class ActionCable::Connection::SubscriptionsTest < ActionCable::TestCase
     end
 
     def setup_connection
-      env = Rack::MockRequest.env_for "/test", 'HTTP_CONNECTION' => 'upgrade', 'HTTP_UPGRADE' => 'websocket'
-      @connection = Connection.new(@server, env)
+      @connection = Connection.new(@server, @server.mock_env)
 
       @subscriptions = ActionCable::Connection::Subscriptions.new(@connection)
     end

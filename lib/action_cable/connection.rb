@@ -7,7 +7,6 @@ module ActionCable
       autoload :Base
       autoload :Identification
       autoload :InternalChannel
-      autoload :MessageBuffer
       autoload :WebSocket
       autoload :Subscriptions
       autoload :TaggedLoggerProxy

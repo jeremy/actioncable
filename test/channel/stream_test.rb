@@ -20,6 +20,7 @@ class ActionCable::Channel::StreamTest < ActionCable::TestCase
     run_in_eventmachine do
       @connection.expects(:pubsub).returns mock().tap { |m| m.expects(:subscribe).with("test_room_1").returns stub_everything(:pubsub) }
       channel = ChatChannel.new @connection, "{id: 1}", { id: 1 }
+      channel.subscribe_to_channel
 
       @connection.expects(:pubsub).returns mock().tap { |m| m.expects(:unsubscribe_proc) }
       channel.unsubscribe_from_channel
@@ -33,6 +34,7 @@ class ActionCable::Channel::StreamTest < ActionCable::TestCase
       end
 
       channel = ChatChannel.new @connection, ""
+      channel.subscribe_to_channel
       channel.stream_for Room.new(1)
     end
   end

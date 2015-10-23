@@ -4,13 +4,6 @@ require 'stubs/test_server'
 class ActionCable::Connection::CrossSiteForgeryTest < ActionCable::TestCase
   HOST = 'rubyonrails.com'
 
-  class Connection < ActionCable::Connection::Base
-    def send_async(method, *args)
-      # Bypass Celluloid
-      send method, *args
-    end
-  end
-
   setup do
     @server = TestServer.new
     @server.config.allowed_request_origins = %w( http://rubyonrails.com )
@@ -55,14 +48,9 @@ class ActionCable::Connection::CrossSiteForgeryTest < ActionCable::TestCase
       response = nil
 
       run_in_eventmachine do
-        response = Connection.new(@server, env_for_origin(origin)).process
+        response = ActionCable::Connection::Base.new(@server, @server.mock_env('HTTP_ORIGIN' => origin)).process
       end
 
       response
-    end
-
-    def env_for_origin(origin)
-      Rack::MockRequest.env_for "/test", 'HTTP_CONNECTION' => 'upgrade', 'HTTP_UPGRADE' => 'websocket', 'SERVER_NAME' => HOST,
-        'HTTP_ORIGIN' => origin
     end
 end

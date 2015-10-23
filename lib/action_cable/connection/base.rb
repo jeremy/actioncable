@@ -49,18 +49,18 @@ module ActionCable
       include Authorization
 
       attr_reader :server, :env
-      delegate :worker_pool, :pubsub, to: :server
+      delegate :worker, :pubsub, to: :server
 
       attr_reader :logger
 
       def initialize(server, env)
         @server, @env = server, env
 
-        @logger = new_tagged_logger
+        @logger = new_tagged_logger(server.logger, server.config.log_tags)
 
-        @websocket      = ActionCable::Connection::WebSocket.new(env)
-        @subscriptions  = ActionCable::Connection::Subscriptions.new(self)
-        @message_buffer = ActionCable::Connection::MessageBuffer.new(self)
+        @websocket = ActionCable::Connection::WebSocket.new(env)
+        @subscriptions = ActionCable::Connection::Subscriptions.new(self)
+        @message_channel = Concurrent::Channel.new(buffer: :buffered, capacity: 100)
 
         @started_at = Time.now
       end
@@ -71,6 +71,7 @@ module ActionCable
         logger.info started_request_message
 
         if websocket.possible? && allow_request_origin?
+          @message_receiver_ready = Concurrent.event
           websocket.on(:open)    { |event| send_async :on_open   }
           websocket.on(:message) { |event| on_message event.data }
           websocket.on(:close)   { |event| send_async :on_close  }
@@ -104,7 +105,7 @@ module ActionCable
 
       # Invoke a method on the connection asynchronously through the pool of thread workers.
       def send_async(method, *arguments)
-        worker_pool.async.invoke(self, method, *arguments)
+        worker.send_async(self, method, *arguments)
       end
 
       # Return a basic hash of statistics for the connection keyed with `identifier`, `started_at`, and `subscriptions`.
@@ -140,14 +141,17 @@ module ActionCable
 
       private
         attr_reader :websocket
-        attr_reader :subscriptions, :message_buffer
+        attr_reader :subscriptions
 
         def on_open
           connect if respond_to?(:connect)
           subscribe_to_internal_channel
           beat
 
-          message_buffer.process!
+          @message_channel.each { |message| receive message }
+          @message_receiver_ready.complete
+          @message_channel.close
+
           server.add_connection(self)
         rescue ActionCable::Connection::Authorization::UnauthorizedError
           respond_to_invalid_request
@@ -155,7 +159,11 @@ module ActionCable
         end
 
         def on_message(message)
-          message_buffer.append message
+          if @message_receiver_ready.completed?
+            receive message
+          else
+            @message_channel.push message
+          end
         end
 
         def on_close
@@ -192,9 +200,9 @@ module ActionCable
 
 
         # Tags are declared in the server but computed in the connection. This allows us per-connection tailored tags.
-        def new_tagged_logger
-          TaggedLoggerProxy.new server.logger,
-            tags: server.config.log_tags.map { |tag| tag.respond_to?(:call) ? tag.call(request) : tag.to_s.camelize }
+        def new_tagged_logger(logger, log_tags)
+          TaggedLoggerProxy.new logger, tags: log_tags.map { |tag|
+            tag.respond_to?(:call) ? tag.call(request) : tag.to_s.camelize }
         end
 
         def started_request_message

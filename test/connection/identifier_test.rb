@@ -64,8 +64,7 @@ class ActionCable::Connection::IdentifierTest < ActionCable::TestCase
     end
 
     def open_connection(server:)
-      env = Rack::MockRequest.env_for "/test", 'HTTP_CONNECTION' => 'upgrade', 'HTTP_UPGRADE' => 'websocket'
-      @connection = Connection.new(server, env)
+      @connection = Connection.new(server, server.mock_env)
 
       @connection.process
       @connection.send :on_open
