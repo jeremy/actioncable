@@ -6,8 +6,10 @@ module ActionCable
   extend ActiveSupport::Autoload
 
   # Singleton instance of the server
+  require 'concurrent-edge'
+  SERVER = Concurrent.delay { ActionCable::Server::Base.new }
   module_function def server
-    @server ||= ActionCable::Server::Base.new
+    SERVER.value
   end
 
   eager_autoload do

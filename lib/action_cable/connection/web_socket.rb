@@ -4,6 +4,7 @@ module ActionCable
   module Connection
     # Decorate the Faye::WebSocket with helpers we need.
     class WebSocket
+      attr_reader :websocket
       delegate :rack_response, :close, :on, to: :websocket
 
       def initialize(env)
@@ -21,9 +22,6 @@ module ActionCable
       def transmit(data)
         websocket.send data
       end
-
-      private
-        attr_reader :websocket
     end
   end
 end

@@ -1,3 +1,5 @@
+require 'active_support/core_ext/module/attr_internal'
+
 module ActionCable
   module Channel
     # Streams allow channels to route broadcastings to the subscriber. A broadcasting is, as discussed elsewhere, a pub/sub queue where any data
@@ -69,11 +71,12 @@ module ActionCable
       # Start streaming from the named <tt>broadcasting</tt> pubsub queue. Optionally, you can pass a <tt>callback</tt> that'll be used
       # instead of the default of just transmitting the updates straight to the subscriber.
       def stream_from(broadcasting, callback = nil)
+        raise 'Missing pubsub' unless pubsub
         callback ||= default_stream_callback(broadcasting)
 
-        streams << [ broadcasting, callback ]
         EM.next_tick { pubsub.subscribe broadcasting, &callback }
 
+        @streams << [ broadcasting, callback ]
         logger.info "#{self.class.name} is streaming from #{broadcasting}"
       end
 
@@ -85,19 +88,15 @@ module ActionCable
       end
 
       def stop_all_streams
-        streams.each do |broadcasting, callback|
+        @streams.each do |broadcasting, callback|
           pubsub.unsubscribe_proc broadcasting, callback
           logger.info "#{self.class.name} stopped streaming from #{broadcasting}"
-        end.clear
+        end
+
+        @streams.clear
       end
 
       private
-        delegate :pubsub, to: :connection
-
-        def streams
-          @_streams ||= []
-        end
-
         def default_stream_callback(broadcasting)
           -> (message) do
             transmit ActiveSupport::JSON.decode(message), via: "streamed from #{broadcasting}"

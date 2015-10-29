@@ -5,7 +5,7 @@ class TestServer < ActionCable::Server::Base
     def initialize
       super
       self.connection_class = ActionCable::Connection::Base
-      self.logger = Concurrent.global_logger
+      self.logger = ActiveSupport::TaggedLogging.new ActiveSupport::Logger.new(StringIO.new)
       self.log_tags = []
       self.disable_request_forgery_protection = false
     end
@@ -13,10 +13,11 @@ class TestServer < ActionCable::Server::Base
 
   attr_reader :logger
 
-  def initialize
+  def initialize(pubsub:)
     config = Configuration.new
-    @logger = Logger.new($stderr)
-    super config
+    @logger = config.logger
+    yield config if block_given?
+    super config, pubsub: pubsub
   end
 
   def mock_env(env = {})

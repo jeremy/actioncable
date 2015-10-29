@@ -48,19 +48,39 @@ module ActionCable
       include InternalChannel
       include Authorization
 
-      attr_reader :server, :env
+      attr_reader :server
       delegate :worker, :pubsub, to: :server
+
+      # The request that initiated the WebSocket connection is available here. This gives access to the environment, cookies, etc.
+      attr_reader :request
 
       attr_reader :logger
 
-      def initialize(server, env)
-        @server, @env = server, env
+      attr_reader :websocket
+      attr_reader :subscriptions
 
+      # Events that are completed when the connection is finished opening and
+      # finished closing. Used to block message handling until the connection
+      # is completely opened and to act as a latch for connection testing.
+      attr_reader :opened_event, :closed_event
+
+      def initialize(server, env, heartbeat_interval: 3)
+        @server = server
         @logger = new_tagged_logger(server.logger, server.config.log_tags)
 
-        @websocket = ActionCable::Connection::WebSocket.new(env)
+        @allowed_request_origins = Array(server.config.allowed_request_origins) unless server.config.disable_request_forgery_protection
+
+        environment = Rails.application.env_config.merge(env) if defined?(Rails.application) && Rails.application
+        @request = ActionDispatch::Request.new(environment || env)
+
+        @websocket = ActionCable::Connection::WebSocket.new(@request.env)
         @subscriptions = ActionCable::Connection::Subscriptions.new(self)
-        @message_channel = Concurrent::Channel.new(buffer: :buffered, capacity: 100)
+
+        @heartbeat_interval = heartbeat_interval
+        @heartbeating = Concurrent::AtomicBoolean.new(false)
+
+        @opened_event = Concurrent.event
+        @closed_event = Concurrent.event
 
         @started_at = Time.now
       end
@@ -68,10 +88,7 @@ module ActionCable
       # Called by the server when a new WebSocket connection is established. This configures the callbacks intended for overwriting by the user.
       # This method should not be called directly. Rely on the #connect (and #disconnect) callback instead.
       def process
-        logger.info started_request_message
-
         if websocket.possible? && allow_request_origin?
-          @message_receiver_ready = Concurrent.event
           websocket.on(:open)    { |event| send_async :on_open   }
           websocket.on(:message) { |event| on_message event.data }
           websocket.on(:close)   { |event| send_async :on_close  }
@@ -115,7 +132,7 @@ module ActionCable
           identifier: connection_identifier,
           started_at: @started_at,
           subscriptions: subscriptions.identifiers,
-          request_id: @env['action_dispatch.request_id']
+          request_id: @request.env['action_dispatch.request_id']
         }
       end
 
@@ -125,14 +142,6 @@ module ActionCable
 
 
       protected
-        # The request that initiated the WebSocket connection is available here. This gives access to the environment, cookies, etc.
-        def request
-          @request ||= begin
-            environment = Rails.application.env_config.merge(env) if defined?(Rails.application) && Rails.application
-            ActionDispatch::Request.new(environment || env)
-          end
-        end
-
         # The cookies of the request that initiated the WebSocket connection. Useful for performing authorization checks.
         def cookies
           request.cookie_jar
@@ -140,51 +149,72 @@ module ActionCable
 
 
       private
-        attr_reader :websocket
-        attr_reader :subscriptions
-
-        def on_open
-          connect if respond_to?(:connect)
-          subscribe_to_internal_channel
-          beat
-
-          @message_channel.each { |message| receive message }
-          @message_receiver_ready.complete
-          @message_channel.close
-
-          server.add_connection(self)
-        rescue ActionCable::Connection::Authorization::UnauthorizedError
-          respond_to_invalid_request
-          close
+        def connect
+          # Implement in subclasses. Provide the method here for super().
         end
 
-        def on_message(message)
-          if @message_receiver_ready.completed?
-            receive message
+        def disconnect
+          # Implement in subclasses. Provide the method here for super().
+        end
+
+        def on_open
+          raise 'Already opened' if @opened_event.completed?
+          logger.info started_request_message
+
+          begin
+            connect
+          rescue ActionCable::Connection::Authorization::UnauthorizedError
+            EM.next_tick { close }
           else
-            @message_channel.push message
+            subscribe_to_internal_channel
+            start_heartbeat @heartbeat_interval
+            @opened_event.complete
           end
         end
 
+        def start_heartbeat(interval)
+          if @heartbeating.make_true
+            schedule_heartbeat interval
+          end
+        end
+
+        def stop_heartbeat
+          @heartbeating.make_false
+        end
+
+        def schedule_heartbeat(interval)
+          Concurrent.
+            schedule(interval) { beat if @heartbeating.true? }.
+            then { schedule_heartbeat interval if @heartbeating.true? }
+        end
+
+        def on_message(message)
+          Concurrent.
+            future(:io) { @opened_event.wait }.
+            then { receive message }.
+            rescue { |exception| logger.error "Error handling #{message.inspect}: #{exception}" }
+        end
+
         def on_close
-          logger.info finished_request_message
+          @opened_event.wait
+          raise 'Already closed' if @closed_event.completed?
 
-          server.remove_connection(self)
-
+          stop_heartbeat
           subscriptions.unsubscribe_from_all
           unsubscribe_from_internal_channel
 
-          disconnect if respond_to?(:disconnect)
+          disconnect
+
+          logger.info finished_request_message
+          @closed_event.complete
         end
 
 
         def allow_request_origin?
-          return true if server.config.disable_request_forgery_protection
-
-          if Array(server.config.allowed_request_origins).include? env['HTTP_ORIGIN']
+          if @allowed_request_origins.nil? || @allowed_request_origins.include?(@request.env['HTTP_ORIGIN'])
             true
           else
-            logger.error("Request origin not allowed: #{env['HTTP_ORIGIN']}")
+            logger.error("Request origin not allowed: #{@request.env['HTTP_ORIGIN']}")
             false
           end
         end

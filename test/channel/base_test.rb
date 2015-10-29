@@ -69,8 +69,8 @@ class ActionCable::Channel::BaseTest < ActiveSupport::TestCase
 
   setup do
     @user = User.new "lifo"
-    @connection = TestConnection.new(@user)
-    @channel = ChatChannel.new @connection, "{id: 1}", { id: 1 }
+    connection = TestConnection.new(@user)
+    @channel = ChatChannel.new connection, "{id: 1}", { id: 1 }
   end
 
   test "should not subscribe to a channel on initialize" do
@@ -97,8 +97,11 @@ class ActionCable::Channel::BaseTest < ActiveSupport::TestCase
     assert_not @channel.subscribed?
   end
 
-  test "connection identifiers" do
-    assert_equal @user.name, @channel.current_user.name
+  test "connection identifier delegated to connection" do
+    assert_equal @channel.connection.current_user, @channel.current_user
+
+    @channel.connection.expects(:current_user).returns(:foo)
+    assert_equal :foo, @channel.current_user
   end
 
   test "callable action without any argument" do
@@ -139,6 +142,6 @@ class ActionCable::Channel::BaseTest < ActiveSupport::TestCase
     @channel.perform_action 'action' => :get_latest
 
     expected = ActiveSupport::JSON.encode "identifier" => "{id: 1}", "message" => { "data" => "latest" }
-    assert_equal expected, @connection.last_transmission
+    assert_equal expected, @channel.connection.last_transmission
   end
 end

@@ -19,7 +19,7 @@ class ActionCable::Connection::SubscriptionsTest < ActionCable::TestCase
   end
 
   setup do
-    @server = TestServer.new
+    @server = TestServer.new(pubsub: mock())
     @server.stubs(:channel_classes).returns(ChatChannel.name => ChatChannel)
 
     @chat_identifier = ActiveSupport::JSON.encode(id: 1, channel: 'ActionCable::Connection::SubscriptionsTest::ChatChannel')

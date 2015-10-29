@@ -1,4 +1,5 @@
 require 'set'
+require 'concurrent/synchronization'
 
 module ActionCable
   module Channel
@@ -77,7 +78,9 @@ module ActionCable
       on_unsubscribe :unsubscribed
 
       attr_reader :params, :connection
-      delegate :logger, to: :connection
+      delegate :logger, :pubsub, to: :connection
+
+      @@action_methods_lock = Concurrent::Synchronization::Lock.new
 
       class << self
         # A list of method names that should be considered actions. This
@@ -89,23 +92,28 @@ module ActionCable
         # ==== Returns
         # * <tt>Set</tt> - A set of all methods that should be considered actions.
         def action_methods
-          @action_methods ||= begin
-            # All public instance methods of this class, including ancestors
-            methods = (public_instance_methods(true) -
-              # Except for public instance methods of Base and its ancestors
-              ActionCable::Channel::Base.public_instance_methods(true) +
-              # Be sure to include shadowed public instance methods of this class
-              public_instance_methods(false)).uniq.map(&:to_s)
-            methods.to_set
-          end
+          @action_methods ||= derive_action_methods
         end
 
-        protected
+        private
+          def derive_action_methods
+            @@action_methods_lock.synchronize do
+              # All public instance methods of this class, including ancestors
+              @action_methods = (public_instance_methods(true) -
+                # Except for public instance methods of Base and its ancestors
+                ActionCable::Channel::Base.public_instance_methods(true) +
+                # Be sure to include shadowed public instance methods of this class
+                public_instance_methods(false)).to_set
+            end
+          end
+
           # action_methods are cached and there is sometimes need to refresh
           # them. ::clear_action_methods! allows you to do that, so next time
           # you run action_methods, they will be recalculated
           def clear_action_methods!
-            @action_methods = nil
+            @@action_methods_lock.synchronize do
+              @action_methods = nil
+            end
           end
 
           # Refresh the cached action_methods when a new action_method is added.
@@ -119,6 +127,9 @@ module ActionCable
         @connection = connection
         @identifier = identifier
         @params     = params
+
+        @active_periodic_timers = []
+        @streams = []
 
         delegate_connection_identifiers
       end
@@ -148,6 +159,7 @@ module ActionCable
       # This method is not intended to be called directly by the user. Instead, overwrite the #unsubscribed callback.
       def unsubscribe_from_channel #:nodoc:
         run_unsubscribe_callbacks
+        self
       end
 
 
@@ -187,7 +199,7 @@ module ActionCable
         end
 
         def processable_action?(action)
-          self.class.action_methods.include?(action.to_s)
+          self.class.action_methods.include?(action.to_sym)
         end
 
         def dispatch_action(action, data)

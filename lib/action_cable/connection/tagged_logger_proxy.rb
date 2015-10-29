@@ -24,8 +24,12 @@ module ActionCable
 
       protected
         def log(type, message)
-          current_tags = tags - @logger.formatter.current_tags
-          @logger.tagged(*current_tags) { @logger.send type, message }
+          if @logger.formatter
+            current_tags = tags - @logger.formatter.current_tags
+            @logger.tagged(*current_tags) { @logger.send type, message }
+          else
+            @logger.send type, message
+          end
         end
     end
   end

@@ -26,16 +26,8 @@ class ActionCable::Channel::PeriodicTimersTest < ActiveSupport::TestCase
   end
 
   setup do
-    # TODO: Make it easy to instantiate a server instance. Lots of coupling,
-    # expectation to only run within a booting Rails app.
-    logger = Logger.new($stderr)
-    @server = ActionCable::Server::Base.new stub \
-      connection_class: ActionCable::Connection::Base,
-      logger: Concurrent.global_logger,
-      log_tags: []
-
-    env = Rack::MockRequest.env_for "/test", 'HTTP_CONNECTION' => 'upgrade', 'HTTP_UPGRADE' => 'websocket'
-    @connection = ActionCable::Connection::Base.new(@server, env)
+    @server = TestServer.new(pubsub: mock())
+    @connection = ActionCable::Connection::Base.new(@server, @server.mock_env)
   end
 
   # FIXME: This doesn't test much and it implies that our internal
@@ -63,14 +55,14 @@ class ActionCable::Channel::PeriodicTimersTest < ActiveSupport::TestCase
 
     # Wait on the first ping.
     channel.pinged.value!
-    assert_in_delta 0.02, Time.now - t0, 0.015
+    assert_in_delta 0.02, Time.now - t0, 0.02
     assert_equal 1, channel.pings
 
     # Unsubscribing gracefully signals periodic tasks to stop the next time
     # it's fired, so we'll wait until send_updates is called. Ping will stop
     # the next time it's called, so we'll still expect just a single ping.
     channel.unsubscribe_from_channel
-    assert_in_delta 0.04, Time.now - t0, 0.015
+    assert_in_delta 0.04, Time.now - t0, 0.02
     assert_equal 1, channel.pings
   end
 end

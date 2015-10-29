@@ -9,7 +9,6 @@ module ActionCable
     eager_autoload do
       autoload :Base
       autoload :Broadcasting
-      autoload :Connections
       autoload :Configuration
 
       autoload :Worker

@@ -20,6 +20,11 @@ module ActionCable
     #      received: (data) ->
     #        new Notification data['title'], body: data['body']
     module Broadcasting
+      def initialize(*)
+        @broadcasting_redis = Concurrent.delay { create_broadcasting_redis }
+        super
+      end
+
       # Broadcast a hash directly to a named <tt>broadcasting</tt>. It'll automatically be JSON encoded.
       def broadcast(broadcasting, message)
         broadcaster_for(broadcasting).broadcast(message)
@@ -28,25 +33,25 @@ module ActionCable
       # Returns a broadcaster for a named <tt>broadcasting</tt> that can be reused. Useful when you have a object that
       # may need multiple spots to transmit to a specific broadcasting over and over.
       def broadcaster_for(broadcasting)
-        Broadcaster.new(self, broadcasting)
+        Broadcaster.new(broadcasting, redis: @broadcasting_redis.value, logger: logger)
       end
 
       # The redis instance used for broadcasting. Not intended for direct user use.
-      def broadcasting_redis
-        @broadcasting_redis ||= Redis.new(config.redis)
+      def create_broadcasting_redis
+        Redis.new config.redis
       end
 
       private
         class Broadcaster
-          attr_reader :server, :broadcasting
+          attr_reader :broadcasting, :redis, :logger
 
-          def initialize(server, broadcasting)
-            @server, @broadcasting = server, broadcasting
+          def initialize(broadcasting, redis:, logger:)
+            @broadcasting, @redis, @logger = broadcasting, redis, logger
           end
 
           def broadcast(message)
-            server.logger.info "[ActionCable] Broadcasting to #{broadcasting}: #{message}"
-            server.broadcasting_redis.publish broadcasting, ActiveSupport::JSON.encode(message)
+            logger.info "[ActionCable] Broadcasting to #{broadcasting}: #{message}"
+            redis.publish broadcasting, ActiveSupport::JSON.encode(message)
           end
         end
     end

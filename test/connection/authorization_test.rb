@@ -12,7 +12,7 @@ class ActionCable::Connection::AuthorizationTest < ActionCable::TestCase
 
   test "unauthorized connection" do
     run_in_eventmachine do
-      server = TestServer.new
+      server = TestServer.new(pubsub: mock())
       connection = Connection.new(server, server.mock_env)
       connection.websocket.expects(:close)
       connection.process

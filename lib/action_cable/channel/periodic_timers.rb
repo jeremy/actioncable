@@ -20,11 +20,6 @@ module ActionCable
         end
       end
 
-      def initialize(*)
-        @active_periodic_timers = []
-        super
-      end
-
       private
         def start_periodic_timers
           @run_periodic_timers = true
@@ -42,7 +37,7 @@ module ActionCable
           if @run_periodic_timers
             Concurrent.
               schedule(options[:every]) { run_periodic_timer callback }.
-              rescue { |exception| puts exception.message; rescue_periodic_timer_error exception }.
+              rescue { |exception| rescue_periodic_timer_error exception }.
               then { schedule_periodic_timer callback, options }
           end
         end

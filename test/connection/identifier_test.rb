@@ -16,8 +16,9 @@ class ActionCable::Connection::IdentifierTest < ActionCable::TestCase
 
   test "connection identifier" do
     run_in_eventmachine do
-      open_connection_with_stubbed_pubsub
-      assert_equal "User#lifo", @connection.connection_identifier
+      open_connection do |connection|
+        assert_equal "User#lifo", connection.connection_identifier
+      end
     end
   end
 
@@ -27,50 +28,29 @@ class ActionCable::Connection::IdentifierTest < ActionCable::TestCase
       pubsub.expects(:subscribe).with('action_cable/User#lifo')
       pubsub.expects(:unsubscribe_proc).with('action_cable/User#lifo', kind_of(Proc))
 
-      server = TestServer.new
-      server.stubs(:pubsub).returns(pubsub)
-
-      open_connection server: server
-      close_connection
+      open_connection pubsub: pubsub do
+        # Do nothing, just want to check expectations on pubsub stub.
+      end
     end
   end
 
   test "processing disconnect message" do
     run_in_eventmachine do
-      open_connection_with_stubbed_pubsub
-
-      @connection.websocket.expects(:close)
-      message = ActiveSupport::JSON.encode('type' => 'disconnect')
-      @connection.process_internal_message message
+      open_connection do |connection|
+        message = ActiveSupport::JSON.encode('type' => 'disconnect')
+        connection.process_internal_message message
+        assert_not connection.websocket.alive?
+      end
     end
   end
 
   test "processing invalid message" do
     run_in_eventmachine do
-      open_connection_with_stubbed_pubsub
-
-      @connection.websocket.expects(:close).never
-      message = ActiveSupport::JSON.encode('type' => 'unknown')
-      @connection.process_internal_message message
+      open_connection do |connection|
+        message = ActiveSupport::JSON.encode('type' => 'unknown')
+        connection.process_internal_message message
+        assert connection.websocket.alive?
+      end
     end
   end
-
-  protected
-    def open_connection_with_stubbed_pubsub
-      server = TestServer.new
-      server.stubs(:pubsub).returns(stub_everything('pubsub'))
-
-      open_connection server: server
-    end
-
-    def open_connection(server:)
-      @connection = Connection.new(server, server.mock_env)
-
-      @connection.process
-      @connection.send :on_open
-    end
-
-    def close_connection
-      @connection.send :on_close
-    end
 end
